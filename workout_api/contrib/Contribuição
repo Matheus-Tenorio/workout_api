@@ -1,0 +1,34 @@
+from fastapi import FastAPI, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from typing import List, Optional
+from fastapi_pagination import Page, paginate
+from fastapi_pagination.bases import AbstractPage
+from database import SessionLocal, engine, Base
+from models import Atleta
+from schemas import AtletaResponse, AtletaCreate
+
+app = FastAPI()
+
+# Dependência de sessão do banco de dados
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Endpoint para listar atletas com query parameters
+@app.get("/atletas", response_model=Page[AtletaResponse])
+async def listar_atletas(
+    nome: Optional[str] = Query(None, description="Nome do atleta"),
+    cpf: Optional[str] = Query(None, description="CPF do atleta"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Atleta)
+    if nome:
+        query = query.filter(Atleta.nome.ilike(f"%{nome}%"))
+    if cpf:
+        query = query.filter(Atleta.cpf == cpf)
+    atletas = query.all()
+    return paginate(atletas)
