@@ -1,1 +1,41 @@
+from fastapi import FastAPI, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from typing import List, Optional
+from fastapi_pagination import Page, add_pagination, paginate
+from fastapi.responses import JSONResponse
+from database import SessionLocal, engine, Base
+from models import Atleta
+from schemas import AtletaResponse, AtletaCreate
 
+app = FastAPI()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    return JSONResponse(
+        status_code=303,
+        content={"detail": f"Já existe um atleta cadastrado com o CPF: {exc.orig.args[0]}"},
+    )
+
+@app.get("/atletas", response_model=Page[AtletaResponse])
+async def listar_atletas(
+    nome: Optional[str] = Query(None, description="Nome do atleta"),
+    cpf: Optional[str] = Query(None, description="CPF do atleta"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Atleta)
+    if nome:
+        query = query.filter(Atleta.nome.ilike(f"%{nome}%"))
+    if cpf:
+        query = query.filter(Atleta.cpf == cpf)
+    atletas = query.all()
+    return paginate(atletas)
+
+add_pagination(app)
